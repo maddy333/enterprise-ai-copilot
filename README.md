@@ -40,7 +40,7 @@ An enterprise-grade, production-ready AI Copilot leveraging Large Language Model
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/your-username/enterprise-ai-copilot.git
+git clone https://github.com/maddy333/enterprise-ai-copilot.git
 cd enterprise-ai-copilot
 ```
 
@@ -66,12 +66,3 @@ docker-compose up --build
 
 Refer to `ARCHITECTURE.md` for a comprehensive deep-dive into the RAG design, system components, scaling strategies, and senior-level architectural choices.
 
-## Contributing
-1. Fork the project
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## License
-Distributed under the MIT License. See `LICENSE` for more information.
