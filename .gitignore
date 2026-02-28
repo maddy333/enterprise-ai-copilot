@@ -1,0 +1,10 @@
+# Docker
+*.log
+qdrant_data/
+postgres_data/
+redis_data/
+.DS_Store
+__pycache__/
+*.pyc
+.env
+secrets/
