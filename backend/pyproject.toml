@@ -1,0 +1,45 @@
+[tool.poetry]
+name = "enterprise-ai-copilot-backend"
+version = "0.1.0"
+description = "Enterprise AI Document Copilot Backend"
+authors = ["AI Engineer <ai@startup.local>"]
+readme = "README.md"
+packages = [{include = "app"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fastapi = {extras = ["all"], version = "^0.109.0"}
+uvicorn = {extras = ["standard"], version = "^0.27.0"}
+sqlalchemy = "^2.0.25"
+alembic = "^1.13.1"
+psycopg2-binary = "^2.9.9"
+asyncpg = "^0.29.0"
+pydantic = "^2.5.3"
+pydantic-settings = "^2.1.0"
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+bcrypt = "^3.2.2"
+python-docx = "^1.1.0"
+langchain-google-genai = "^0.0.9"
+google-generativeai = "^0.3.2"
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+python-multipart = "^0.0.6"
+redis = "^5.0.1"
+celery = "^5.3.6"
+langchain = "^0.1.0"
+langchain-community = "^0.0.13"
+langchain-core = "^0.1.10"
+qdrant-client = "^1.7.0"
+sentence-transformers = "^2.2.2"
+pdfplumber = "^0.10.3"
+loguru = "^0.7.2"
+prometheus-fastapi-instrumentator = "^6.1.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.4"
+pytest-asyncio = "^0.23.3"
+black = "^23.12.1"
+ruff = "^0.1.13"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
