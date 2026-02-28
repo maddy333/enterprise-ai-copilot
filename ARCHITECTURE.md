@@ -1,6 +1,6 @@
 # Enterprise AI Copilot - Technical Architecture Document
 
-## 1. Project Architecture Diagram (Text Representation)
+## 1. Project Architecture Diagram
 
 Below is the high-level system architecture designed for scalability, low latency, and distinct separation of concerns.
 
@@ -89,26 +89,26 @@ enterprise-ai-copilot/
 
 ## 3. Step-by-Step Implementation Roadmap
 
-**Phase 1: Foundation (Weeks 1-2)**
+**Phase 1: Foundation**
 - Setup Git monorepo, linters (Ruff/Black for backend, ESLint for frontend).
 - Provision local PostgreSQL. Implement auth flow: SQLAlchemy User models, JWT auth endpoints, and role validation.
 - Bootstrap Vite/React application and wire up the Login/Signup pages using Zustand for auth state.
 
-**Phase 2: Ingestion & Vectorization (Weeks 3-4)**
+**Phase 2: Ingestion & Vectorization **
 - Implement file upload endpoints. Stream files directly to disk/S3 to avoid RAM saturation.
 - Build the processing queue: extract text (`pdfplumber` / `unstructured`), split into chunks, generate embeddings, and upsert to Vector DB alongside tenant metadata (e.g., `user_id`).
 
-**Phase 3: The RAG & Chat Engine (Weeks 5-6)**
+**Phase 3: The RAG & Chat Engine
 - Build the QA retrieval endpoint. Implement similarity search in Vector DB with user filtering.
 - Setup LangChain/LlamaIndex. Combine retrieved contexts with conversation history stored in PostgreSQL.
 - Implement Server-Sent Events (SSE) `/chat/stream` endpoint for a responsive UI typing effect.
 
-**Phase 4: Frontend Integration & UX Polish (Weeks 7-8)**
+**Phase 4: Frontend Integration & UX Polish
 - Build the main Chat Interface with markdown rendering, history sidebar, and drag-and-drop file upload.
 - Implement proper visual citation links referencing source chunks.
 - Add error boundary handling, loading skeletons, and responsive design.
 
-**Phase 5: Productionization (Weeks 9-10)**
+**Phase 5: Productionization 
 - Write Dockerfiles and test via Docker Compose.
 - Configure asynchronous workers (Celery/RQ) if document processing needs scaling out.
 - Deploy onto AWS ECS / GCP Cloud Run. Hook up Prometheus/Grafana for monitoring latency and token usage.
@@ -190,25 +190,4 @@ async def stream_rag_response(query: str, session_id: str, user_id: str):
 - Implementing **Semantic Caching** (e.g., GPTCache). If User B asks a semantically identical question to User A, return the cached result instead of hitting the LLM API.
 - Limit Context Window usage by implementing a fast Keyword/BM25 sparse search before running heavy dense embeddings.
 
-## 7. Advanced Features for Senior Engineers
 
-1. **Re-Ranking Layer (Cross-Encoder):** Base vector search retrieves top 20 chunks. Pass these to a cross-encoder (like `Cohere Rerank` or `BGE-Reranker`) to sort the absolute best 5 chunks before feeding to the LLM. Drastically improves QA quality.
-2. **Agentic Routing:** Instead of naive RAG, use the LLM to classify the query intent first. Does the user want a summary? Does the user want a specific fact search? Route to different specialized retrieval chains.
-3. **Data Security (Multi-Tenancy Partitioning):** Hardcode namespace/metadata filtering. `user_id` MUST be securely injected by JWT middlewares into the VectorDB query engine to prevent cross-tenant data leaks.
-4. **Asynchronous Task Queue:** Heavy PDFs (1000+ pages) will timeout an HTTP request. Introduce Celery & Redis to handle ingestion, giving users a WebSocket/SSE ping when their document says "Ready".
-
-## 8. Common Senior-Level Pitfalls
-
-1. **Vector Search Blindness:** Relying solely on Vector search fails miserably on exact-match queries (e.g., "Find invoice #1234"). **Fix:** Implement Hybrid Search (Vector + Sparse/BM25).
-2. **Context Stuffing:** Shoving 50 document chunks into an LLM window causes "Lost in the Middle" syndrome. **Fix:** Re-rank, strictly limit context size, and ensure prompt engineering forces citations.
-3. **Blocking the Event Loop:** A junior mistake in FastAPI is using standard blocking `requests.post()` to call the vector DB or LLM. **Fix:** Strictly enforce `aiohttp` or `AsyncClient`.
-4. **Token Exhaustion:** Allowing unlimited chat history context. **Fix:** Implement a sliding window memory algorithm or summarize older messages in the background.
-
-## 9. Resume-Ready Project Description
-
-**[Project Name] | Enterprise AI Document Copilot | Lead Full-Stack Engineer**
-*Architected and deployed a production-grade Retrieval-Augmented Generation (RAG) platform, enabling secure, contextual conversation over proprietary corporate documents.*
-- Designed a scalable, async microservices backend using **Python/FastAPI** and **LangChain**, handling distributed document processing (PDF/DOCX) via asynchronous task queues.
-- Engineered a high-precision retrieval pipeline utilizing hybrid search (Dense + BM25) with **Vector Databases (FAISS/Pinecone)** and cross-encoder re-ranking to yield <500ms retrieval latencies.
-- Implemented robust multi-tenant data security and JWT role-based access control, preventing cross-leakage of indexed embedded contexts natively at the query level.
-- Built a responsive **React/Zustand** frontend integrating Server-Sent Events (SSE) for real-time text generation streaming, significantly elevating UX while maintaining clear source citations and logging via **PostgreSQL**.
