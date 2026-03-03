@@ -1,193 +1,283 @@
-# Enterprise AI Copilot - Technical Architecture Document
+# Enterprise AI Copilot  
+Technical Architecture & System Design Document
 
-## 1. Project Architecture Diagram
+---
 
-Below is the high-level system architecture designed for scalability, low latency, and distinct separation of concerns.
+# 1. System Overview
 
-```text
+Enterprise AI Copilot is a production-grade Retrieval-Augmented Generation (RAG) platform designed for secure, scalable deployment in enterprise environments.
+
+The system is architected with strict separation of concerns:
+
+- Presentation Layer
+- API & Auth Layer
+- Retrieval & Inference Layer
+- Data & Storage Layer
+- Infrastructure & Observability Layer
+
+The design prioritizes:
+
+- Horizontal scalability
+- Security isolation
+- Low latency streaming
+- Cloud-native portability
+- Fault tolerance
+
+---
+
+# 2. High-Level Architecture Diagram
+
+```
 +-------------------------------------------------------------+
-|                      CLIENT TIER                            |
-|  React SPA (Vite/Tailwind) - Chat UI, Doc Management        |
+|                        CLIENT TIER                          |
+|  React SPA (Chat UI, Document Mgmt, Admin Console)         |
 +------------------------------+------------------------------+
-                               | (REST / Server-Sent Events)
+                               | REST / SSE
                                v
 +-------------------------------------------------------------+
-|                     API GATEWAY TIER                        |
-|  FastAPI (Uvicorn/Gunicorn) - Routing, ReST API             |
-|  JWT Auth Middleware, Rate Limiting, CORS                   |
+|                       API GATEWAY                           |
+|  FastAPI (Async)                                            |
+|  - JWT Authentication                                       |
+|  - RBAC Middleware                                          |
+|  - Rate Limiting                                            |
+|  - Request Validation                                       |
++------------------------------+------------------------------+
+               |                                      |
+               v                                      v
++----------------------------+      +-------------------------------+
+| DOCUMENT INGESTION PIPELINE|      |       RAG / CHAT ENGINE       |
+| - File Upload Handler      |      | - Session Manager              |
+| - Text Extraction          |      | - Prompt Orchestrator          |
+| - Semantic Chunking        |      | - Context Builder              |
+| - Embedding Generation     |      | - Streaming Token Handler      |
++----------------------------+      +---------------+----------------+
+               |                                      |
+               v                                      v
+         +-------------+                        +-------------+
+         | Embeddings  |                        | LLM Engine  |
+         | (BGE Large) |                        | (Llama/Mixtral)
+         +-------------+                        +-------------+
+               |                                      ^
+               v                                      |
 +-------------------------------------------------------------+
-             |                                |
-             v                                v
-+--------------------------+    +-----------------------------+
-|   DOCUMENT PIPELINE      |    |       RAG / CHAT ENGINE     |
-| - Text Extractor         |    | - Session/Memory Manager    |
-| - Semantic Splitter      |    | - Prompt Orchestrator       |
-| - Embeddings Generator   |    | - LLM Output Parser         |
-+--------------------------+    +-------------+---------------+
-             |                                |
-             v                                | (Queries)
-         +-------+                            v
-         | bge-large-en                  +---------+
-         | (Embeddings)                  | LLM     | (Llama-3/Mistral)
-         +-------+                       +---------+
-             |                                ^
-             v                                |
-+-------------------------------------------------------------+
-|                        DATA TIER                            |
-|                                                             |
-|  PostgreSQL: Users, Roles, History, Document Metadata       |
-|  Pinecone/FAISS: Vector embeddings & hybrid indices         |
-|  AWS S3: Raw document blob storage                          |
+|                           DATA TIER                         |
+|  PostgreSQL: Users, Sessions, Roles, Metadata               |
+|  Vector DB: Pinecone / FAISS / Milvus                       |
+|  Object Storage: AWS S3 / MinIO                             |
 +-------------------------------------------------------------+
 ```
 
-## 2. Project Folder Structure
+---
 
-A standardized, production-ready monorepo layout that prevents circular imports, ensures clear separation of domains, and aligns with enterprise microservice conventions.
+# 3. Deployment Topology (Production)
 
-```text
+Recommended cloud deployment (AWS example):
+
+- ECS or EKS cluster
+- Managed PostgreSQL (RDS)
+- Managed Vector DB (Pinecone / Milvus)
+- S3 for object storage
+- ALB for traffic routing
+- CloudWatch + Prometheus for monitoring
+
+Design properties:
+
+- Stateless API containers
+- Horizontal autoscaling enabled
+- Zero-downtime rolling deployments
+- Externalized state (DB + vector store)
+
+---
+
+# 4. Security Architecture
+
+Security is enforced at multiple layers:
+
+## Authentication
+- JWT-based access tokens
+- Token expiration + refresh mechanism
+- Role-based access control (Admin/User)
+
+## Data Isolation
+- Strict metadata filtering in vector queries:
+  - `filter={"user_id": current_user}`
+- Document-level access segregation
+- Namespaced object storage keys
+
+## Secret Management
+- Environment-based configuration
+- Production: Secrets injected via cloud secret manager
+- No hardcoded credentials
+
+## API Protection
+- Rate limiting
+- CORS configuration
+- Input validation via Pydantic schemas
+
+---
+
+# 5. RAG Pipeline Deep Dive
+
+## 5.1 Document Ingestion
+
+1. File uploaded via API
+2. Streamed directly to object storage
+3. Text extracted (pdfplumber / unstructured)
+4. Semantic chunking:
+   - Chunk size: 512
+   - Overlap: 50
+5. Embeddings generated via BGE-large
+6. Upsert into Vector DB with metadata
+
+Metadata example:
+```
+{
+  "user_id": "...",
+  "document_id": "...",
+  "tenant_id": "..."
+}
+```
+
+---
+
+## 5.2 Query Execution Flow
+
+1. Validate JWT
+2. Fetch chat history from PostgreSQL
+3. Perform similarity search (k=5)
+4. Apply strict metadata filtering
+5. Re-rank results (optional cross-encoder)
+6. Construct augmented prompt
+7. Stream tokens via SSE
+
+---
+
+# 6. Latency Optimization
+
+- Fully async FastAPI (uvloop)
+- Streaming token generation (<200ms first token)
+- Quantized models (4-bit AWQ/GPTQ)
+- Embedding caching
+- Hybrid sparse + dense search to reduce heavy retrieval
+
+Target:
+
+- < 1.5s average end-to-end latency (excluding model load)
+
+---
+
+# 7. Failure Handling & Resilience
+
+## Vector DB Unavailable
+- Graceful fallback with empty retrieval
+- Explicit "No context found" messaging
+
+## LLM Timeout
+- Configurable timeout + retry policy
+- Circuit breaker pattern (recommended for prod)
+
+## Partial Failures
+- Structured error responses
+- Correlation IDs for debugging
+- Logging via JSON format
+
+---
+
+# 8. Observability & Monitoring
+
+Production observability stack:
+
+- Prometheus metrics
+- Grafana dashboards
+- Structured JSON logs
+- Health endpoints (`/health`, `/ready`)
+- Token usage tracking
+- Retrieval latency metrics
+
+Recommended SLOs:
+
+- API Availability: 99.9%
+- P95 latency < 2.5 seconds
+- Error rate < 1%
+
+---
+
+# 9. Scalability Strategy
+
+| Component | Scaling Model |
+|------------|--------------|
+| API Layer | Horizontal autoscaling |
+| LLM Engine | Dedicated GPU node |
+| Retrieval | Managed Vector DB |
+| Storage | S3-backed |
+| DB | Managed RDS with read replicas |
+
+Stateless API ensures rolling updates without downtime.
+
+---
+
+# 10. Folder Structure (Monorepo Design)
+
+```
 enterprise-ai-copilot/
-├── .github/
-│   └── workflows/          # GitHub Actions (CI/CD, linting, tests)
 ├── backend/
 │   ├── app/
 │   │   ├── api/
-│   │   │   ├── routes/     # FastAPI routers (auth, chat, documents)
-│   │   │   └── deps.py     # FastAPI dependencies (DB sessions, user context)
 │   │   ├── core/
-│   │   │   ├── config.py   # Pydantic BaseSettings for env var management
-│   │   │   ├── security.py # Hashing, JWT minting/validation
-│   │   │   └── logger.py   # Structured JSON logging
 │   │   ├── db/
-│   │   │   ├── models/     # SQLAlchemy ORM models (Users, Chats)
-│   │   │   ├── vector.py   # Vector DB client wrapper (Pinecone/FAISS)
-│   │   │   └── session.py  # DB engine setup
-│   │   ├── schemas/        # Pydantic validation schemas (Input/Output)
-│   │   ├── services/       # Core business logic
-│   │   │   ├── auth.py
-│   │   │   ├── rag.py      # LangChain/LlamaIndex coordination
-│   │   │   └── llm.py      # Direct LLM invocation methods
-│   │   └── main.py         # App entry point
-│   ├── tests/              # Pytest harness (Unit/Integration)
-│   ├── alembic/            # DB schema migrations
-│   ├── requirements.txt    # Or pyproject.toml / poetry
+│   │   ├── schemas/
+│   │   ├── services/
+│   │   └── main.py
+│   ├── tests/
+│   ├── alembic/
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── components/     # Dumb UI components (Buttons, ChatBubbles)
-│   │   ├── features/       # Smart, domain-specific modules (AuthFlow, ChatInterface)
-│   │   ├── hooks/          # React hooks (`useAuth`, `useRAGStream`)
-│   │   ├── services/       # Axios wrappers for API communication
-│   │   ├── store/          # Zustand state management
-│   │   └── App.tsx         # Routing
-│   ├── package.json
 │   └── Dockerfile
-├── infra/                  # Terraform / Kubernetes manifests
-├── docker-compose.yml      # Local orchestration
+├── infra/
+├── docker-compose.yml
 └── README.md
 ```
 
-## 3. Step-by-Step Implementation Roadmap
+---
 
-**Phase 1: Foundation**
-- Setup Git monorepo, linters (Ruff/Black for backend, ESLint for frontend).
-- Provision local PostgreSQL. Implement auth flow: SQLAlchemy User models, JWT auth endpoints, and role validation.
-- Bootstrap Vite/React application and wire up the Login/Signup pages using Zustand for auth state.
+# 11. Enterprise Integration Readiness
 
-**Phase 2: Ingestion & Vectorization **
-- Implement file upload endpoints. Stream files directly to disk/S3 to avoid RAM saturation.
-- Build the processing queue: extract text (`pdfplumber` / `unstructured`), split into chunks, generate embeddings, and upsert to Vector DB alongside tenant metadata (e.g., `user_id`).
+Designed for integration with:
 
-**Phase 3: The RAG & Chat Engine
-- Build the QA retrieval endpoint. Implement similarity search in Vector DB with user filtering.
-- Setup LangChain/LlamaIndex. Combine retrieved contexts with conversation history stored in PostgreSQL.
-- Implement Server-Sent Events (SSE) `/chat/stream` endpoint for a responsive UI typing effect.
+- CRM systems
+- Internal knowledge bases
+- Enterprise API gateways
+- External identity providers (future enhancement)
 
-**Phase 4: Frontend Integration & UX Polish
-- Build the main Chat Interface with markdown rendering, history sidebar, and drag-and-drop file upload.
-- Implement proper visual citation links referencing source chunks.
-- Add error boundary handling, loading skeletons, and responsive design.
+Supports embedding as:
 
-**Phase 5: Productionization 
-- Write Dockerfiles and test via Docker Compose.
-- Configure asynchronous workers (Celery/RQ) if document processing needs scaling out.
-- Deploy onto AWS ECS / GCP Cloud Run. Hook up Prometheus/Grafana for monitoring latency and token usage.
+- Internal enterprise tool
+- Standalone SaaS
+- Backend AI microservice
 
-## 4. Code Skeletons
+---
 
-### Backend: FastAPI Route Wrapper (`app/api/routes/chat.py`)
-```python
-from fastapi import APIRouter, Depends
-from fastapi.responses import StreamingResponse
-from app.api.deps import get_current_user
-from app.services.rag import stream_rag_response
-from app.schemas.chat import ChatRequest
+# 12. Cost Optimization Strategy
 
-router = APIRouter()
+- Semantic caching (GPTCache pattern)
+- Hybrid search before dense embedding
+- Configurable context window trimming
+- Quantized inference models
+- Batched embedding requests
 
-@router.post("/stream")
-async def chat_stream(
-    request: ChatRequest,
-    current_user = Depends(get_current_user)
-):
-    # Generates SSE stream natively asynchronously
-    generator = stream_rag_response(
-        query=request.message, 
-        session_id=request.session_id, 
-        user_id=current_user.id
-    )
-    return StreamingResponse(generator, media_type="text/event-stream")
-```
+---
 
-### Backend: RAG Service logic (`app/services/rag.py`)
-```python
-from langchain_core.prompts import PromptTemplate
-from app.db.vector import VectorStore
+# 13. Future Enhancements
 
-async def stream_rag_response(query: str, session_id: str, user_id: str):
-    # 1. Fetch History from Postgres
-    history = get_chat_history(session_id)
-    
-    # 2. Strict Metadata Filtering for Security
-    docs = await VectorStore.similarity_search(
-        query, 
-        k=5, 
-        filter={"user_id": user_id} 
-    )
-    context = "\n---\n".join([d.page_content for d in docs])
-    
-    # 3. Augment Prompt and Stream
-    prompt = f"Context:\n{context}\n\nHistory:\n{history}\n\nQuery:\n{query}"
-    
-    async for token in LLMClient.astream(prompt):
-        yield f"data: {token}\n\n"
-```
+- Multi-tenant architecture
+- Fine-grained document ACLs
+- Model drift monitoring
+- Centralized audit logging
+- Distributed task queue (Celery/RQ)
 
-## 5. API Endpoints List
+---
 
-- `POST /api/v1/auth/register` (Create User)
-- `POST /api/v1/auth/token` (Issue JWT)
-- `POST /api/v1/documents/` (Upload & trigger embedding pipeline)
-- `GET /api/v1/documents/` (List user documents)
-- `POST /api/v1/chat/sessions/` (Start new chat thread)
-- `GET /api/v1/chat/sessions/{id}/history` (Load past messages)
-- `POST /api/v1/chat/stream` (Core RAG inference over SSE)
+# Conclusion
 
-## 6. AI Architecture Deep Dive
-
-**RAG Pipeline Choices:**
-- **Chunking Strategy:** `RecursiveCharacterTextSplitter`. Chunk size `512`, overlap `50`. Small chunks ensure the LLM receives dense mathematical/factual information rather than loose narrative, improving Context Precision.
-- **Embedding Model:** `BAAI/bge-large-en-v1.5` (via specialized inference container or HuggingFace TEI). BGE handles complex retrieval tasks significantly better than default OpenAI `ada-002` while retaining data privacy.
-- **Prompt Engineering:** Strict system prompts with negative constraints. 
-  *Pattern:* `You are a corporate assistant. Answer exactly according to the XML <context>. If the answer is absent, explicitly state "Information not found in documents."`
-
-**Latency Optimization:**
-- **Asynchronous Execution:** FastAPI runs on `uvloop`. LLM network calls and DB queries MUST strictly use `async`/`await`.
-- **Text Streaming:** Returning the first token in <200ms hides the total generation time (TTFB vs. total latency).
-- **Quantization:** Serving Mistral/Llama models quantized to 4-bit (AWQ/GPTQ) via vLLM.
-
-**Cost Optimization:**
-- Implementing **Semantic Caching** (e.g., GPTCache). If User B asks a semantically identical question to User A, return the cached result instead of hitting the LLM API.
-- Limit Context Window usage by implementing a fast Keyword/BM25 sparse search before running heavy dense embeddings.
-
-
+This system is designed not merely as a demo RAG application, but as a production-ready, cloud-native AI platform capable of secure enterprise deployment with horizontal scalability, strict access control, and operational observability.
