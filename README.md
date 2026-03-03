@@ -236,5 +236,3 @@ ARCHITECTURE.md
 
 MIT License
 ````
-
----
